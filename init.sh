@@ -1,8 +1,8 @@
 #!/bin/bash
 
-git clone https://github.com/torvalds/linux
+git clone git@github.com:lelloman/linux.git
 cd linux
-git checkout v5.19
+git checkout playground-5.19
 cd ../
 cp .config-linux linux/.config
 
