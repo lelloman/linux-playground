@@ -1,0 +1,15 @@
+[package]
+name = "nettest"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "nettestserver"
+path = "src/server.rs"
+
+[[bin]]
+name = "nettestclient"
+path = "src/client.rs"
+
+[dependencies]
+clap = {version = "3.2.22", features = ["derive"] }
