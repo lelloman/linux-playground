@@ -29,7 +29,7 @@ fn main() {
     let mut rcv_count = 0;
 
     loop {
-        let (amt, src) = socket
+        let (amt, _src) = socket
             .recv_from(&mut buf)
             .expect("Could not receive message");
 

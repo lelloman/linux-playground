@@ -1,13 +1,12 @@
 #!/bin/bash
 
 cd linux
-make -j20
-cd arch/x86_64/boot
-cd ../../../../
+make -j22
+cd ../
 
 cp .config-buildroot buildroot/.config
 cd buildroot
-make -j16
+make -j22
 cd ..
 
 ./build_programs.sh

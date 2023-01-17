@@ -47,7 +47,7 @@ fn main() {
     let msg = [49u8; 65000];
 
     socket.send(MSG_SEQ_START);
-    for i in 0..cli_args.count {
+    for _ in 0..cli_args.count {
         socket.send(&msg);
         if let Some(sleep_us) = cli_args.sleep_time_nano {
             thread::sleep(Duration::from_nanos(sleep_us));
