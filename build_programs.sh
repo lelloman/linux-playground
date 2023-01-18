@@ -9,6 +9,10 @@ cd kmallocer
 cargo build --release
 cd ../
 
+cd mfiller
+cargo build --release
+cd ../
+
 
 # copy programs
 rm -rf programs
@@ -16,6 +20,7 @@ mkdir programs
 mkdir fs_overlay/programs
 cp nettest/target/release/nettestserver programs
 cp kmallocer/target/release/kmallocer programs
+cp mfiller/target/release/mfiller programs
 
 sudo rm programs.img
 dd if=/dev/zero of=programs.img bs=1M count=1024
