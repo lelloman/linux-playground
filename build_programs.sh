@@ -13,19 +13,11 @@ cd mfiller
 cargo build --release
 cd ../
 
+# setup shared/bin
+rm -rf shared/bin
+mkdir shared/bin
 
 # copy programs
-rm -rf programs
-mkdir programs
-mkdir fs_overlay/programs
-cp nettest/target/release/nettestserver programs
-cp kmallocer/target/release/kmallocer programs
-cp mfiller/target/release/mfiller programs
-
-sudo rm programs.img
-dd if=/dev/zero of=programs.img bs=1M count=1024
-mkfs.ext2 programs.img
-sudo mount -o loop programs.img /mnt
-sudo cp -a programs/* /mnt
-sudo chmod +x /mnt/*
-sudo umount /mnt
+cp nettest/target/release/nettestserver shared/bin
+cp kmallocer/target/release/kmallocer shared/bin
+cp mfiller/target/release/mfiller shared/bin

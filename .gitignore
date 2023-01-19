@@ -1,5 +1,4 @@
 linux*/
 buildroot/
 netconsd/
-programs/
-programs.img
+shared/

@@ -8,3 +8,6 @@ cp .config-linux linux/.config
 
 git clone git://git.buildroot.net/buildroot
 cp .config-buildroot buildroot/.config
+
+mkdir shared
+touch shared/dummy
