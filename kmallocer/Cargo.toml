@@ -12,3 +12,10 @@ rand = "0.8.5"
 regex = "1"
 lazy_static = "1.4.0"
 ctrlc = "3.2.4"
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true
+codegen-units = 1
+panic = "abort"
