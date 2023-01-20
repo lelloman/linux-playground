@@ -111,7 +111,7 @@ static void fmt_bytes(unsigned long int bytes, char* buf) {
 static ssize_t perform_burst_and_print(struct file *file, char __user *ubuf, size_t count, loff_t *ppos)
 {
 
-    unsigned long int allocated,tot_allocated = 0, peak = 0;
+    unsigned long int allocated,tot_allocated = 0, peak = 0, min = ~0 ;
     char fmt_buf[512];
     int len = 0;
 
@@ -123,6 +123,7 @@ static ssize_t perform_burst_and_print(struct file *file, char __user *ubuf, siz
     for (int i=0;i<iterations;i++) {
         allocated = allocation_loop();
         peak = allocated > peak ? allocated : peak;
+        min = allocated < min ? allocated : min;
         tot_allocated += allocated;
         fmt_bytes(allocated, fmt_buf);
         len += sprintf(buf + len, "%s\n", fmt_buf);
@@ -130,6 +131,9 @@ static ssize_t perform_burst_and_print(struct file *file, char __user *ubuf, siz
 
     fmt_bytes(peak, fmt_buf);
     len += sprintf(buf + len, "peak: %s ", fmt_buf);
+
+    fmt_bytes(min, fmt_buf);
+    len += sprintf(buf + len, "min: %s ", fmt_buf);
 
     fmt_bytes(tot_allocated / iterations, fmt_buf);
     len += sprintf(buf + len, "avg: %s\n", fmt_buf);
