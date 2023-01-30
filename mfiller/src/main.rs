@@ -13,6 +13,9 @@ struct CliArgs {
 
     #[clap(short = 'c', long, default_value_t = 300)]
     file_count: u16,
+
+    #[clap(short, long)]
+    loop_forever: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -139,11 +142,16 @@ fn main() {
         println!("Using files from previous run");
     }
 
-    println!("Cat forever");
-    loop {
-        let target_file = files_paths
-            .choose(&mut rand::thread_rng())
-            .expect("Could not pick random file");
-        cat_file(target_file);
+    if cli_args.loop_forever {
+        println!("Cat forever");
+        loop {
+            let target_file = files_paths
+                .choose(&mut rand::thread_rng())
+                .expect("Could not pick random file");
+            cat_file(target_file);
+        }
+    } else {
+        println!("Cat once");
+        files_paths.iter().for_each(|file_path| cat_file(file_path));
     }
 }

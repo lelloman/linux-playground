@@ -7,9 +7,9 @@ sudo qemu-system-x86_64 \
   -drive format=raw,file=buildroot/output/images/rootfs.ext2,if=virtio \
   -append "root=/dev/vda console=ttyS0 nokaslr" \
   -display none \
-  -m 300M \
+  -m 1G \
   -enable-kvm \
-  -smp 2 \
+  -smp 4 \
   -device e1000,netdev=eth0 \
   -netdev user,id=eth0,hostfwd=tcp::5555-:22,hostfwd=udp::6666-:6667,hostfwd=tcp::3333-:4444 \
   -cpu host \

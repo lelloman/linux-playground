@@ -6,64 +6,44 @@
 #include <linux/delay.h>
 
 #define BUFSIZE 1024
+#define MAX_ALLOCATION_NODES 20000
 
 static struct proc_dir_entry *ent;
 
 static int iterations = 5;
-static long unsigned int max_allocation = 50000000;
+static long unsigned int max_allocation = 1000 * 1000 * 100;
 static size_t min_allocation_size = 1 << 14;
-static size_t max_allocation_size = 1 << 20;
+static size_t max_allocation_size = 1 << 17;
 static u64 max_iteration_time_ns = 1000 * 1000 * 20;
-static unsigned long int hold_time_ms = 250;
+static unsigned long int hold_time_ms = 500;
 
 static const char *entry_name = "kmallocer";
 
 static char buf[BUFSIZE];
 
-static ssize_t dummy_write(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos)
-{
-    printk("Nothing to write here.");
-    return 0;
-}
-
-struct allocation_node {
-    struct allocation_node* next;
-    void* ptr;
-};
-
 static unsigned long int allocation_loop(void) 
 {
-    struct allocation_node* new_node, *prev_root, *root = NULL;
     unsigned long int tot_allocated, allocation_size, i = 0;
+    void **allocation_nodes;
+    int current_allocation_node;
     int successful_allocation_streak = 0;
     u64 start_time, elapsed;
 
     tot_allocated = 0;
     allocation_size = min_allocation_size;
+    allocation_nodes = vzalloc(sizeof(void*) * MAX_ALLOCATION_NODES);
+    
     start_time = ktime_get_ns();    
+    current_allocation_node = 0;
     for(;;) {        
-        struct capukkion* allocated = kzalloc(allocation_size, __GFP_ATOMIC|__GFP_HIGH);
+        void* allocated = kmalloc(allocation_size, __GFP_ATOMIC|__GFP_HIGH);
         if (!allocated) {
-            size_t next_allocation_size = allocation_size >> 1;
-            if (next_allocation_size < min_allocation_size) {
-                next_allocation_size = min_allocation_size;
-//                break;
-            }
-            //printk("kmalloc %d failed", allocation_size);
-            allocation_size = next_allocation_size;
+            allocation_size = allocation_size >> 1;
+            allocation_size = allocation_size < min_allocation_size ? min_allocation_size : allocation_size;
         } else {
-            //printk("kmalloc %d OK", allocation_size);
             memset(allocated, 19, allocation_size);
-            new_node = vmalloc(sizeof(struct allocation_node));
             tot_allocated += allocation_size;
-            if (!new_node) {
-                printk("Failed to vmalloc");
-                break;
-            }
-            prev_root = root;
-            root = new_node;
-            new_node->next = prev_root;
-            new_node->ptr = allocated;
+            allocation_nodes[current_allocation_node++] = allocated;
             
             if (++successful_allocation_streak >= 3) {
                 successful_allocation_streak = 0;
@@ -82,12 +62,14 @@ static unsigned long int allocation_loop(void)
     }
     mdelay(hold_time_ms);
     
-    while(root) {
-        struct allocation_node* popped = root;
-        root = popped->next;
-        kfree(popped->ptr);
-        vfree(popped);
+    for(int i=0;i<MAX_ALLOCATION_NODES;i++) {        
+        void* allocation = allocation_nodes[i];
+        if(allocation != NULL)
+            kfree(allocation);
+        else
+            break;
     }
+    vfree(allocation_nodes);
 
     return tot_allocated;
 }
@@ -115,7 +97,7 @@ static ssize_t perform_burst_and_print(struct file *file, char __user *ubuf, siz
     char fmt_buf[512];
     int len = 0;
 
-    printk("myread file: %p, ubuf: %p count: %ld, ppos %p", file, ubuf, count, ppos);
+    printk("performing burst file: %p, ubuf: %p count: %ld, ppos %lld", file, ubuf, count, *ppos);
 
     if (*ppos > 0 || count < BUFSIZE)
         return 0;
@@ -148,7 +130,6 @@ static ssize_t perform_burst_and_print(struct file *file, char __user *ubuf, siz
 static struct proc_ops myops =
 {
         .proc_read = perform_burst_and_print,
-        .proc_write = dummy_write,
 };
 
 int init_module(void)
