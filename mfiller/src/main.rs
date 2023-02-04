@@ -1,10 +1,12 @@
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
 use rand::seq::SliceRandom;
-use std::fmt;
 use std::fs::{create_dir, remove_dir_all, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::{fmt, thread};
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -16,6 +18,9 @@ struct CliArgs {
 
     #[clap(short, long)]
     loop_forever: bool,
+
+    #[clap(short, long, default_value_t = 1)]
+    threads: u16,
 }
 
 #[derive(Debug, Clone)]
@@ -106,52 +111,95 @@ fn config_files_already_there(
         == expected_count
 }
 
-fn main() {
-    let cli_args = CliArgs::parse();
-    let target_dir = Path::new("mfiller");
-
-    let mut files_paths = (0..cli_args.file_count)
+fn make_file_paths(file_count: u16, target_dir: &Path) -> Vec<PathBuf> {
+    (0..file_count)
         .map(|i| {
             let file_name = format!("filler_{}", i);
             target_dir.join(Path::new(&file_name))
         })
-        .collect();
+        .collect()
+}
 
-    if !config_files_already_there(cli_args.file_count.into(), cli_args.file_size, &files_paths) {
+fn create_files(file_count: u16, file_size: u128, target_dir: &Path, files_paths: &Vec<PathBuf>) {
+    if !config_files_already_there(file_count.into(), file_size, files_paths) {
         println!("Creating target dir...");
         if Path::new("mfiller").exists() {
             remove_dir_all(target_dir).expect("Could not remove existing target dir");
         }
         create_dir(target_dir).expect("Could not create target dir");
 
-        let formatted_bytes =
-            Byte::from_bytes(cli_args.file_size.into()).get_appropriate_unit(false);
+        let formatted_bytes = Byte::from_bytes(file_size.into()).get_appropriate_unit(false);
         println!(
             "Creating {} files of size {}...",
-            cli_args.file_count, formatted_bytes
+            file_count, formatted_bytes
         );
-        if cli_args.file_count < 1 {
+        if file_count < 1 {
             return;
         }
 
         println!("Writing files content...");
-        files_paths.iter_mut().for_each(|file_path| {
-            write_content(file_path, cli_args.file_size);
+        files_paths.iter().for_each(|file_path| {
+            write_content(file_path, file_size);
         });
     } else {
         println!("Using files from previous run");
     }
+}
 
-    if cli_args.loop_forever {
-        println!("Cat forever");
-        loop {
+fn spawn_cat_forever_thread(
+    files_paths: Vec<PathBuf>,
+    running: Arc<AtomicBool>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        while running.load(Ordering::SeqCst) {
             let target_file = files_paths
                 .choose(&mut rand::thread_rng())
                 .expect("Could not pick random file");
             cat_file(target_file);
         }
+    })
+}
+
+fn set_ctrl_c_handler(running: Arc<AtomicBool>) {
+    ctrlc::set_handler(move || {
+        running.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
+}
+
+fn main() {
+    let cli_args = CliArgs::parse();
+    let target_dir = Path::new("mfiller");
+
+    let files_paths = make_file_paths(cli_args.file_count, &target_dir);
+    create_files(
+        cli_args.file_count,
+        cli_args.file_size,
+        &target_dir,
+        &files_paths,
+    );
+
+    let running = Arc::new(AtomicBool::new(true));
+
+    set_ctrl_c_handler(running.clone());
+    let mut join_handles = Vec::<thread::JoinHandle<()>>::new();
+
+    if cli_args.loop_forever {
+        println!("Cat forever");
+        for _ in 0..cli_args.threads {
+            join_handles.push(spawn_cat_forever_thread(
+                files_paths.clone(),
+                running.clone(),
+            ));
+        }
     } else {
         println!("Cat once");
         files_paths.iter().for_each(|file_path| cat_file(file_path));
     }
+
+    join_handles.into_iter().for_each(|handle| {
+        handle
+            .join()
+            .unwrap_or_else(|_| println!("thread join failure"));
+    });
 }

@@ -7,3 +7,4 @@ edition = "2021"
 clap = {version = "3.2.22", features = ["derive"] }
 rand = "0.8.5"
 byte-unit = "4.0.18"
+ctrlc = "3.2.4"

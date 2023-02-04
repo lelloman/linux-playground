@@ -136,19 +136,25 @@ impl fmt::Display for Params {
     }
 }
 
+fn print_read_error_msg() {
+    println!(
+        "Could not read params from {}, are you running the correct kernel?",
+        CONF_PATH
+    );
+}
+
 fn main() {
     let args = CliArgs::parse();
     let mut params = match Params::read() {
         Ok(x) => x,
-        Err(_) => {
-            println!(
-                "Could not read params from {}, are you running the correct kernel?",
-                CONF_PATH
-            );
-            return;
-        }
+        Err(_) => return print_read_error_msg(),
     };
-    params.apply(&args);
-    println!("{:}", params);    
-    params.write().expect("Could not write params.");
+    params.apply(&args);    
+    let _ = params.write();
+
+    let updated_params = match Params::read() {
+        Ok(x) => x,
+        Err(_) => return print_read_error_msg(),
+    };
+    println!("{:}", updated_params);    
 }
