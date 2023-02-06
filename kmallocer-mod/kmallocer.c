@@ -12,39 +12,49 @@ static struct proc_dir_entry *ent;
 
 static int iterations = 5;
 static long unsigned int max_allocation = 1000 * 1000 * 100;
-static size_t min_allocation_size = 1 << 14;
-static size_t max_allocation_size = 1 << 17;
-static u64 max_iteration_time_ns = 1000 * 1000 * 20;
+static size_t min_allocation_size = 1 << 13;
+static size_t max_allocation_size = 1 << 16;
+static u64 max_iteration_time_ns = 1000 * 1000 * 15;
 static unsigned long int hold_time_ms = 500;
 
 static const char *entry_name = "kmallocer";
 
 static char buf[BUFSIZE];
 
+struct allocation_node {
+    void *allocation;
+    struct allocation_node *next;
+};
+
 static unsigned long int allocation_loop(void) 
 {
     unsigned long int tot_allocated, allocation_size, i = 0;
-    void **allocation_nodes;
-    int current_allocation_node;
+    struct allocation_node *root_node, *tail_node, *tmp_node;
     int successful_allocation_streak = 0;
     u64 start_time, elapsed;
 
     tot_allocated = 0;
     allocation_size = min_allocation_size;
-    allocation_nodes = vzalloc(sizeof(void*) * MAX_ALLOCATION_NODES);
-    
+    root_node = kzalloc(sizeof(struct allocation_node), GFP_KERNEL);
+    if (!root_node) {
+        return 0;
+    }
+    tail_node = root_node;
     start_time = ktime_get_ns();    
-    current_allocation_node = 0;
     for(;;) {        
         void* allocated = kmalloc(allocation_size, __GFP_ATOMIC|__GFP_HIGH);
         if (!allocated) {
             allocation_size = allocation_size >> 1;
             allocation_size = allocation_size < min_allocation_size ? min_allocation_size : allocation_size;
         } else {
-            memset(allocated, 19, allocation_size);
+            tmp_node = allocated;
+            tmp_node->allocation = allocated;
+            tmp_node->next = NULL;
+
+            tail_node->next = tmp_node;
+            tail_node = tmp_node;
+
             tot_allocated += allocation_size;
-            allocation_nodes[current_allocation_node++] = allocated;
-            
             if (++successful_allocation_streak >= 3) {
                 successful_allocation_streak = 0;
                 allocation_size = allocation_size << 1;                
@@ -62,14 +72,12 @@ static unsigned long int allocation_loop(void)
     }
     mdelay(hold_time_ms);
     
-    for(int i=0;i<MAX_ALLOCATION_NODES;i++) {        
-        void* allocation = allocation_nodes[i];
-        if(allocation != NULL)
-            kfree(allocation);
-        else
-            break;
+    tmp_node = root_node;
+    while (tmp_node) {
+        root_node = tmp_node->next;
+        kfree(tmp_node->allocation);
+        tmp_node = root_node;
     }
-    vfree(allocation_nodes);
 
     return tot_allocated;
 }
