@@ -3,24 +3,8 @@ use anyhow::Error;
 use clap::{ArgGroup, Parser};
 use std::fmt;
 use std::io::Write;
-use std::num::ParseIntError;
 
 const CONF_PATH: &str = "/proc/mfkb";
-
-#[derive(Debug)]
-struct ParamsError;
-
-impl From<ParseIntError> for ParamsError {
-    fn from(_: ParseIntError) -> Self {
-        ParamsError {}
-    }
-}
-
-impl From<std::io::Error> for ParamsError {
-    fn from(_: std::io::Error) -> Self {
-        ParamsError {}
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 struct Ratio {
@@ -79,7 +63,7 @@ struct Params {
     pub low_ratio: Ratio,
 }
 
-fn read_conf_file() -> Result<String, ParamsError> {
+fn read_conf_file() -> Result<String, Error> {
     let bytes = std::process::Command::new("cat")
         .arg(CONF_PATH)
         .output()?
@@ -88,14 +72,14 @@ fn read_conf_file() -> Result<String, ParamsError> {
 }
 
 impl Params {
-    fn read() -> Result<Params, ParamsError> {
+    fn read() -> Result<Params, Error> {
         Params::from_str(&read_conf_file()?)
     }
 
-    fn from_str(s: &str) -> Result<Params, ParamsError> {
+    fn from_str(s: &str) -> Result<Params, Error> {
         let split = s.split(" ").collect::<Vec<&str>>();
         if split.len() != 7 {
-            return Result::Err(ParamsError {});
+            bail!("Invalid format");
         };
 
         Ok(Params {
@@ -107,11 +91,11 @@ impl Params {
             low_ratio: Ratio {
                 numerator: split[5].parse()?,
                 denominator: split[6].parse()?,
-            }
+            },
         })
     }
 
-    fn write(&self) -> Result<(), ParamsError> {
+    fn write(&self) -> Result<(), Error> {
         let mut file = std::fs::OpenOptions::new().write(true).open(CONF_PATH)?;
         writeln!(file, "{}", self.to_str())?;
         Ok(())
