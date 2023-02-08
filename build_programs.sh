@@ -5,15 +5,13 @@ cd mfiller
 cargo build --release
 cd ../
 
-cd kmallocer-mod
+cd kmallocer/mod
 make clean all
-cd ../
+cd ../kmallocerctl
+cargo build --release
+cd ../../
 
 cd eboostctl
-cargo build --release
-cd ../
-
-cd kmallocerctl
 cargo build --release
 cd ../
 
@@ -24,5 +22,4 @@ mkdir shared/bin
 # copy programs
 cp eboostctl/target/release/eboostctl shared/bin
 cp mfiller/target/release/mfiller shared/bin
-cp kmallocerctl/target/release/kmallocerctl shared/bin
-cp kmallocer-mod/kmallocer.ko shared
+cp kmallocer/kmallocerctl/target/release/kmallocerctl shared/bin

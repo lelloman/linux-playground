@@ -1,13 +1,27 @@
-use anyhow::bail;
-use anyhow::Error;
+use anyhow::{bail, Context, Error};
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
 use std::io::Write;
-use std::thread;
-use std::{fmt, fs};
+use std::process::Command;
+use std::{fmt, fs, thread};
 
 const CONF_PATH: &str = "/proc/kmallocer/conf";
 const DO_PATH: &str = "/proc/kmallocer/do";
+
+const MODULE_BYTES: &'static [u8] = include_bytes!("../../mod/kmallocer.ko");
+
+fn cat_file(path: &str) -> Result<String, Error> {
+    let bytes = Command::new("cat").arg(path).output()?.stdout;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn exec(cmd: &str, args: &[&str]) -> Result<(), Error> {
+    let status = Command::new(cmd).args(args).status()?;
+    if !status.success() {
+        bail!("exec failed");
+    }
+    Ok(())
+}
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -45,11 +59,6 @@ struct Params {
     pub hold_time_ms: u64,
     pub min_allocation_size: u64,
     pub max_allocation_size: u64,
-}
-
-fn cat_file(path: &str) -> Result<String, Error> {
-    let bytes = std::process::Command::new("cat").arg(path).output()?.stdout;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 impl fmt::Display for Params {
@@ -165,8 +174,44 @@ fn print_read_error_msg() {
     );
 }
 
+fn is_module_loaded() -> Result<bool, Error> {
+    Ok(cat_file("/proc/modules")
+        .context("could not cat /proc/modules")?
+        .contains("kmallocer"))
+}
+
+fn unload_module() -> Result<(), Error> {
+    exec("rmmod", &["kmallocer"])
+}
+
+fn create_module_file() -> Result<(), Error> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open("kmallocer.ko")?;
+    Ok(file.write_all(MODULE_BYTES)?)
+}
+
+fn load_module() -> Result<(), Error> {
+    create_module_file()?;
+    exec("insmod", &["kmallocer.ko"])
+}
+
+fn ensure_module_is_loaded() -> Result<(), Error> {
+    if is_module_loaded()? {
+        unload_module()?;
+    }
+    load_module()?;
+
+    if !is_module_loaded()? {
+        bail!("Module not loaded");
+    }
+    Ok(())
+}
+
 fn main() {
     let args = CliArgs::parse();
+    assert!(ensure_module_is_loaded().is_ok());
     let mut params = match Params::read() {
         Ok(x) => x,
         Err(_) => return print_read_error_msg(),
