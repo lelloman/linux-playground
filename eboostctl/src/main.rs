@@ -1,10 +1,9 @@
-use anyhow::bail;
-use anyhow::Error;
+use anyhow::{bail, Error, Context};
 use clap::{ArgGroup, Parser};
 use std::fmt;
 use std::io::Write;
 
-const CONF_PATH: &str = "/proc/mfkb";
+const CONF_PATH: &str = "/proc/atomic_boost_conf";
 
 #[derive(Debug, Clone, PartialEq)]
 struct Ratio {
@@ -51,9 +50,12 @@ struct CliArgs {
 
     #[arg(short, long, value_parser=parse_ratio)]
     low_ratio: Option<Ratio>,
+
+    #[arg(long)]
+    reset: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Params {
     pub enabled: bool,
     pub run_interval: u8,
@@ -97,8 +99,16 @@ impl Params {
 
     fn write(&self) -> Result<(), Error> {
         let mut file = std::fs::OpenOptions::new().write(true).open(CONF_PATH)?;
-        writeln!(file, "{}", self.to_str())?;
+        writeln!(file, "{}", self.to_str()).expect("failed to write");
         Ok(())
+    }
+
+    fn reset(&self) -> Result<(), Error> {
+        let mut copy = self.clone();
+        copy.enabled = false;
+        copy.write().context("Could not write disabled params for reset")?;
+        copy.enabled = true;
+        return copy.write().context("Could not write enabled params for reset");
     }
 
     fn to_str(&self) -> String {
@@ -157,25 +167,19 @@ impl fmt::Display for Params {
     }
 }
 
-fn print_read_error_msg() {
-    println!(
-        "Could not read params from {}, are you running the correct kernel?",
-        CONF_PATH
-    );
+fn run(args: CliArgs) -> Result<(), Error> {
+    let mut params = Params::read()?;
+    if args.reset { params.reset()? }
+    params.apply(&args);
+    params.write()?;
+
+    let updated_params = Params::read()?;
+    Ok(println!("{:}", updated_params))
 }
 
 fn main() {
     let args = CliArgs::parse();
-    let mut params = match Params::read() {
-        Ok(x) => x,
-        Err(_) => return print_read_error_msg(),
-    };
-    params.apply(&args);
-    let _ = params.write();
-
-    let updated_params = match Params::read() {
-        Ok(x) => x,
-        Err(_) => return print_read_error_msg(),
-    };
-    println!("{:}", updated_params);
+    if let Err(err) = run(args) {
+        println!("An error occurred.\n{}", err);
+    }
 }
