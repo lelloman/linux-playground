@@ -5,7 +5,7 @@ sudo qemu-system-x86_64 \
   -kernel linux/arch/x86_64/boot/bzImage \
   -nographic \
   -drive format=raw,file=buildroot/output/images/rootfs.ext2,if=virtio \
-  -append "root=/dev/vda console=ttyS0 nokaslr" \
+  -append "root=/dev/vda console=ttyS0 nokaslr cgroup_no_v1=all systemd.unified_cgroup_hierachy=1" \
   -display none \
   -m 1G \
   -enable-kvm \
