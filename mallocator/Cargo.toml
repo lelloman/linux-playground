@@ -1,0 +1,11 @@
+[package]
+name = "mallocator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.1.11", features = ["derive"] }
+rand = "0.8.5"
+byte-unit = "4.0.18"
+ctrlc = "3.2.4"
+anyhow = "1.0.70"
