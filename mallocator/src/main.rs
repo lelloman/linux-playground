@@ -1,4 +1,5 @@
 use anyhow::Result;
+use rand::random;
 use byte_unit::{Byte, ByteError};
 use clap::{Args, Parser, Subcommand};
 use std::collections::HashMap;
@@ -11,6 +12,7 @@ struct State {
     pub base_size: usize,
     pub allocations: HashMap<usize, Vec<Box<[u8]>>>,
     pub binary_multiples: bool,
+    pub same_value_fill: bool,
 }
 
 impl State {
@@ -20,6 +22,7 @@ impl State {
             base_size: 1_000_000,
             allocations: HashMap::new(),
             binary_multiples: false,
+            same_value_fill: false,
         }
     }
 
@@ -27,7 +30,8 @@ impl State {
         let tot = Byte::from_bytes(self.tot_allocated).get_appropriate_unit(self.binary_multiples);
         let base =
             Byte::from_bytes(self.base_size as u128).get_appropriate_unit(self.binary_multiples);
-        println!("Base: {}\n", base);
+        println!("Base: {}", base);
+        println!("SameValueFill: {}\n", self.same_value_fill);
         println!("Tot allocated: {}", tot);
         let mut entries: Vec<(usize, usize)> = self
             .allocations
@@ -54,6 +58,7 @@ enum Subcommands {
     Alloc(AllocArgs),
     Free(FreeArgs),
     B,
+    FlipSameValue,
 }
 
 trait Action {
@@ -77,6 +82,10 @@ impl Action for Subcommands {
             Subcommands::Set(args) => args.execute(state),
             Subcommands::B => {
                 state.binary_multiples = !state.binary_multiples;
+                Ok(())
+            },
+            Subcommands::FlipSameValue => {
+                state.same_value_fill = !state.same_value_fill;
                 Ok(())
             }
         }
@@ -114,7 +123,24 @@ impl Action for AllocArgs {
     fn execute(&self, state: &mut State) -> Result<()> {
         let allocations_container = state.allocations.entry(state.base_size).or_default();
         for _ in 0..self.count {
-            let allocation = vec![7u8; state.base_size];
+            let allocation = if state.same_value_fill {
+                let n: u8 = random();
+                vec![n; state.base_size]
+            } else {
+                let n: u128 = random();
+                let mut allocation: Vec<u8> = vec![0u8; state.base_size];
+                for i in 0..allocation.len() {
+                    let value = if i % 10 == 0 {
+                        random::<u8>()
+                    } else {
+                        let k: u8 = ((i % 4) as u8) * 8;
+                        ((n >> k) & 0xff) as u8
+                    };
+                    allocation[i] = value;
+                } 
+                allocation
+            };
+            
             allocations_container.push(allocation.into_boxed_slice());
         }
         state.tot_allocated += state.base_size as u128 * self.count as u128;

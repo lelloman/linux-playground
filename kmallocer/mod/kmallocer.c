@@ -46,7 +46,7 @@ static unsigned long int allocation_loop(void)
     tail_node = root_node;
     start_time = ktime_get_ns();    
     for(;;) {        
-        void* allocated = kmalloc(allocation_size, __GFP_ATOMIC|__GFP_HIGH);
+        void* allocated = kmalloc(allocation_size, __GFP_HIGH);
         if (!allocated) {
             allocation_size = allocation_size >> 1;
             allocation_size = allocation_size < min_allocation_size ? min_allocation_size : allocation_size;
