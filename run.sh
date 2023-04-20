@@ -6,7 +6,8 @@ sudo qemu-system-x86_64 \
   -nographic \
   -drive format=raw,file=buildroot/output/images/rootfs.ext2,if=virtio \
   -append "root=/dev/vda console=ttyS0 nokaslr cgroup_no_v1=all systemd.unified_cgroup_hierachy=1" \
-  -drive format=raw,file=swap.img,if=virtio \
+  -drive format=raw,file=swap1.img,if=virtio \
+  -drive format=raw,file=swap2.img,if=virtio \
   -display none \
   -m 1G \
   -enable-kvm \
