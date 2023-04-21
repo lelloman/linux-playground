@@ -24,11 +24,16 @@ cd mallocator
 cargo build --release
 cd ../
 
+cd mstress
+cargo build --release
+cd ../
+
 # setup shared/bin
 rm -rf shared/bin
 mkdir shared/bin
 
 # copy programs
+cp mstress/target/release/mstress shared/bin
 cp eboostctl/target/release/eboostctl shared/bin
 cp mfiller/target/release/mfiller shared/bin
 cp mallocator/target/release/mallocator shared/bin

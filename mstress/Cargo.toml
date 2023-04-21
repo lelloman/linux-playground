@@ -1,0 +1,11 @@
+[package]
+name = "mstress"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ctrlc = "3.2.5"
+clap = {version = "4.2.4", features = ["derive"] }
+anyhow = "1.0.70"
+libc = "0.2.142"
+byte-unit = "4.0.19"
