@@ -36,6 +36,9 @@ struct CliArgs {
 
     #[clap(long, default_value_t = 100)]
     stride: usize,
+
+    #[clap(short, long)]
+    timeout_seconds: Option<u64>,
 }
 
 #[derive(Default)]
@@ -64,6 +67,7 @@ struct State {
     start_time: Instant,
     mem_stats: MemStats,
     workers: Vec<WorkerState>,
+    verifications: u128,
 }
 
 enum WorkerState {
@@ -76,6 +80,7 @@ enum Message {
     WorkerState(u16, WorkerState),
     MemStats(MemStats),
     ThreadError(String, String),
+    VerificationCompleted,
 }
 
 struct ThreadPayload {
@@ -266,6 +271,8 @@ fn spawn_memory_worker(id: u16, payload: ThreadPayload) -> JoinHandle<String> {
             {
                 payload.error(format!("Verification error.\n{}", err));
                 break;
+            } else {
+                payload.send(Message::VerificationCompleted);
             }
         }
         payload.id
@@ -287,7 +294,7 @@ fn spawn_pool_percent_flipper(payload: ThreadPayload) -> JoinHandle<String> {
     spawn(move || {
         let mut i = 0;
         while payload.running.load(Ordering::SeqCst) {
-            for j in 0..payload.args.max_pool_percent_flip_seconds {
+            for _ in 0..payload.args.max_pool_percent_flip_seconds {
                 sleep(sleep_duration);
             }
             i += 1;
@@ -448,6 +455,8 @@ fn render_state(state: &State) {
     let target_str = state.target.get_appropriate_unit(true).to_string();
     print_row(&["Target:", &target_str], "<>");
 
+    print_row(&["Verifications:", &state.verifications.to_string()], "<>");
+
     println!("");
     render_free_stats(&state.mem_stats.free);
     println!("");
@@ -467,6 +476,7 @@ fn main() {
         start_time: Instant::now(),
         mem_stats: MemStats::default(),
         workers: (0..args.threads).map(|_| WorkerState::Allocating).collect(),
+        verifications: 0,
     };
 
     setup_ctrl(running.clone());
@@ -495,6 +505,8 @@ fn main() {
     }
 
     let rcv_timeout = Duration::from_secs(1);
+    let start_time = Instant::now();
+    let timeout_secs = args.timeout_seconds.unwrap_or(u64::MAX);
     while running.load(Ordering::SeqCst) {
         match rx.recv_timeout(rcv_timeout) {
             Ok(Message::MemStats(stats)) => {
@@ -515,7 +527,14 @@ fn main() {
                     .expect("Failed to cat to logs.txt");
                 break;
             }
+            Ok(Message::VerificationCompleted) => {
+                state.verifications += 1;
+                render_state(&state);
+            }
             Err(_) => {}
+        }
+        if start_time.elapsed().as_secs() >= timeout_secs {
+            running.store(false, Ordering::SeqCst);
         }
     }
 

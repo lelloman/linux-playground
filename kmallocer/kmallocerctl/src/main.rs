@@ -198,10 +198,9 @@ fn load_module() -> Result<(), Error> {
 }
 
 fn ensure_module_is_loaded() -> Result<(), Error> {
-    if is_module_loaded()? {
-        unload_module()?;
+    if !is_module_loaded()? {
+        load_module()?;
     }
-    load_module()?;
 
     if !is_module_loaded()? {
         bail!("Module not loaded");
