@@ -8,13 +8,14 @@ sudo qemu-system-x86_64 \
   -append "root=/dev/vda console=ttyS0 nokaslr cgroup_no_v1=all systemd.unified_cgroup_hierachy=1" \
   -drive format=raw,file=swap1.img,if=virtio \
   -display none \
-  -m 200M \
+  -m 1G \
   -enable-kvm \
   -smp 4 \
   -device e1000,netdev=eth0 \
   -netdev user,id=eth0,hostfwd=tcp::5555-:22,hostfwd=udp::6666-:6667,hostfwd=tcp::3333-:4444 \
   -cpu host \
   -virtfs local,path=shared,mount_tag=host0,security_model=passthrough,id=host0 \
+  -virtfs local,path=linux,mount_tag=host1,security_model=passthrough,id=host1 \
 
 # mstress -j1 --hold-time-ms 100 --max-pool-percent-flip-seconds 1 --stride 4096 --bytes 120000000
 
