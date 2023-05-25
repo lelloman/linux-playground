@@ -19,6 +19,9 @@ struct CliArgs {
     #[clap(short, long)]
     bytes: Option<u128>,
 
+    #[clap(long)]
+    flip_max_pool_percent: bool,
+
     #[clap(long, default_value_t = 20)]
     high_max_pool_percent: u8,
 
@@ -232,10 +235,7 @@ fn verify_and_free(size: usize, stride: usize, ptr: *mut libc::c_void) -> Result
             ring.push_back(popped);
             if failed {
                 let mut msg = String::new();
-                msg += &format!(
-                    "Possible memory corruption at {:p} ({:#x}).",
-                    &slice[i], i
-                );
+                msg += &format!("Possible memory corruption at {:p} ({:#x}).", &slice[i], i);
                 while !ring.is_empty() {
                     let popped = ring.pop_front().unwrap();
                     msg += &format!("\n{:x?}", popped);
@@ -358,7 +358,7 @@ fn fmt_duration(seconds: u64) -> String {
 fn get_available_memory() -> Result<u128> {
     let free_stats =
         parse_free().context("Could not determine target allocation, failed to parse free.")?;
-    let swap_percent = (free_stats.swap_available as f64 * 0.8) as u128;
+    let swap_percent = (free_stats.swap_available as f64 * 0.4) as u128;
     Ok(free_stats.mem_available + swap_percent)
 }
 
@@ -492,9 +492,11 @@ fn main() {
 
     let mut join_handles: Vec<JoinHandle<String>> = Vec::new();
 
-    join_handles.push(spawn_pool_percent_flipper(
-        payload.clone("pool-percent-flipper"),
-    ));
+    if args.flip_max_pool_percent {
+        join_handles.push(spawn_pool_percent_flipper(
+            payload.clone("pool-percent-flipper"),
+        ));
+    }
     join_handles.push(spawn_stats_parser(payload.clone("stats")));
 
     for i in 0..args.threads {
