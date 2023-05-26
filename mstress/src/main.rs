@@ -35,13 +35,16 @@ struct CliArgs {
     refresh_rate_ms: u16,
 
     #[clap(long, default_value_t = 200)]
-    hold_time_ms: u64,
+    base_hold_time_ms: u64,
 
     #[clap(long, default_value_t = 100)]
     stride: usize,
 
     #[clap(short, long)]
     timeout_seconds: Option<u64>,
+
+    #[clap(long, default_value_t = 1.0)]
+    staggered_hold_time_factor: f64,
 }
 
 #[derive(Default)]
@@ -252,7 +255,19 @@ fn verify_and_free(size: usize, stride: usize, ptr: *mut libc::c_void) -> Result
 }
 
 fn spawn_memory_worker(id: u16, payload: ThreadPayload) -> JoinHandle<String> {
-    let sleep_duration = Duration::from_millis(payload.args.hold_time_ms);
+    let sleep_time_ms = match payload.args.base_hold_time_ms {
+        0 => 0,
+        _ =>  {
+            if payload.args.staggered_hold_time_factor == 1.0 {
+                payload.args.base_hold_time_ms
+            } else {
+                let f = payload.args.staggered_hold_time_factor as f64;
+                let i = id as f64 + 1.0;
+                (payload.args.base_hold_time_ms as f64 / i.powf(f)) as u64
+            }
+        },
+    };
+    let sleep_duration = Duration::from_millis(sleep_time_ms);
 
     spawn(move || {
         while payload.running.load(Ordering::SeqCst) {
