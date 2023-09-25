@@ -3,7 +3,6 @@ use byte_unit::Byte;
 use clap::Parser;
 use libc::{free, malloc};
 use std::collections::VecDeque;
-use std::io::Write;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -18,18 +17,6 @@ struct CliArgs {
 
     #[clap(short, long)]
     bytes: Option<u128>,
-
-    #[clap(long)]
-    flip_max_pool_percent: bool,
-
-    #[clap(long, default_value_t = 20)]
-    high_max_pool_percent: u8,
-
-    #[clap(long, default_value_t = 1)]
-    low_max_pool_percent: u8,
-
-    #[clap(long, default_value_t = 5)]
-    max_pool_percent_flip_seconds: u16,
 
     #[clap(short, long, default_value_t = 1000)]
     refresh_rate_ms: u16,
@@ -294,34 +281,6 @@ fn spawn_memory_worker(id: u16, payload: ThreadPayload) -> JoinHandle<String> {
     })
 }
 
-fn set_max_pool_percent(value: u8) -> Result<()> {
-    std::fs::File::create("/sys/module/zswap/parameters/max_pool_percent")?
-        .write_all(format!("{}", value).as_bytes())?;
-    Ok(())
-}
-
-fn spawn_pool_percent_flipper(payload: ThreadPayload) -> JoinHandle<String> {
-    let percents: [u8; 2] = [
-        payload.args.low_max_pool_percent,
-        payload.args.high_max_pool_percent,
-    ];
-    let sleep_duration = Duration::from_secs(1);
-    spawn(move || {
-        let mut i = 0;
-        while payload.running.load(Ordering::SeqCst) {
-            for _ in 0..payload.args.max_pool_percent_flip_seconds {
-                sleep(sleep_duration);
-            }
-            i += 1;
-            let flipped = set_max_pool_percent(percents[i % 2]);
-            if let Err(err) = flipped {
-                payload.error(format!("Could not flip max pool percent.\n{}", err));
-            }
-        }
-        payload.id
-    })
-}
-
 fn read_swap_param(name: &str) -> Result<u128> {
     let txt = std::fs::read_to_string(format!("/sys/kernel/debug/zswap/{}", name))?;
     Ok(txt.trim().parse::<u128>()?)
@@ -507,11 +466,6 @@ fn main() {
 
     let mut join_handles: Vec<JoinHandle<String>> = Vec::new();
 
-    if args.flip_max_pool_percent {
-        join_handles.push(spawn_pool_percent_flipper(
-            payload.clone("pool-percent-flipper"),
-        ));
-    }
     join_handles.push(spawn_stats_parser(payload.clone("stats")));
 
     for i in 0..args.threads {
