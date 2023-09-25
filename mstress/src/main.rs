@@ -9,6 +9,15 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread::{sleep, spawn, JoinHandle};
 use std::time::{Duration, Instant};
+use rand::Rng;
+
+fn u8_percent(s: &str) -> Result<u8> {
+    let parsed = s.parse::<u8>()?;
+    if parsed > 100 {
+        bail!("Percent value must be at most 100.");
+    }
+    Ok(parsed)
+}
 
 #[derive(Parser, Clone)]
 struct CliArgs {
@@ -32,6 +41,12 @@ struct CliArgs {
 
     #[clap(long, default_value_t = 1.0)]
     staggered_hold_time_factor: f64,
+
+    #[clap(long)]
+    target: Option<u128>,
+
+    #[clap(long, default_value_t = 0, value_parser=u8_percent)]
+    rand_data_percent: u8,
 }
 
 #[derive(Default)]
@@ -82,6 +97,7 @@ struct ThreadPayload {
     thread_allocation_size: usize,
     running: Arc<AtomicBool>,
     tx: Sender<Message>,
+    rand_data_len: usize,
 }
 
 impl ThreadPayload {
@@ -92,6 +108,7 @@ impl ThreadPayload {
             thread_allocation_size: self.thread_allocation_size,
             running: self.running.clone(),
             tx: self.tx.clone(),
+            rand_data_len: self.rand_data_len.clone(),
         }
     }
 
@@ -167,7 +184,7 @@ fn parse_zswap() -> Result<ZswapStats> {
     Ok(ZswapStats {
         written_back: read_swap_param("written_back_pages")?,
         rejects: read_swap_param("reject_reclaim_fail")?,
-        pool_size: read_swap_param("pool_total_size")?,
+        pool_size: read_swap_param("stored_pages")?,
     })
 }
 
@@ -179,14 +196,22 @@ fn setup_ctrl(running: Arc<AtomicBool>) {
     .expect("Could not set Ctrl-C handler.");
 }
 
-fn make_allocation(size: usize, stride: usize) -> *mut libc::c_void {
+fn make_allocation(size: usize, stride: usize, random_data_len: usize) -> *mut libc::c_void {
     unsafe {
         let ptr = malloc(size);
         let slice: &mut [u8] = std::slice::from_raw_parts_mut(ptr as *mut u8, size);
-
+        let mut rng = rand::thread_rng();
         let mut i = 0;
         let mut index = 0;
-        while i < size {
+        if random_data_len > 0 {
+            while i < size {
+                rng.fill(&mut slice[i..i+random_data_len]);
+                i += 4096;
+            }
+        }
+
+        i = 0;
+        while i < size-8 {
             slice[i] = 0x11;
             slice[i + 1] = 0x22;
             slice[i + 2] = 0x33;
@@ -211,7 +236,7 @@ fn verify_and_free(size: usize, stride: usize, ptr: *mut libc::c_void) -> Result
         for _ in 0..4 {
             ring.push_back([0u8; 8]);
         }
-        while i < size {
+        while i < size-8 {
             let failed = slice[i] != 0x11
                 || slice[i + 1] != 0x22
                 || slice[i + 2] != 0x33
@@ -259,7 +284,7 @@ fn spawn_memory_worker(id: u16, payload: ThreadPayload) -> JoinHandle<String> {
     spawn(move || {
         while payload.running.load(Ordering::SeqCst) {
             payload.send(Message::WorkerState(id, WorkerState::Allocating));
-            let ptr = make_allocation(payload.thread_allocation_size, payload.args.stride);
+            let ptr = make_allocation(payload.thread_allocation_size, payload.args.stride, payload.rand_data_len);
             if ptr.is_null() {
                 payload.error("Allocation failed".to_owned());
                 break;
@@ -387,8 +412,8 @@ fn render_zswap_stats(stats: &ZswapStats) {
     print_row(
         &[
             "size",
-            &fmtb(stats.pool_size),
-            &(stats.pool_size / 4096).to_string(),
+            &fmtb(stats.pool_size*4096),
+            &stats.pool_size.to_string(),
         ],
         "<>>",
     );
@@ -456,12 +481,14 @@ fn main() {
     setup_ctrl(running.clone());
     let (tx, rx): (Sender<Message>, Receiver<Message>) = channel();
 
+    let rand_data_len: usize = (args.rand_data_percent as usize * 4096) / 100;
     let payload = ThreadPayload {
         id: "".to_owned(),
         args: args.clone(),
         thread_allocation_size: thread_allocation_size,
         running: running.clone(),
         tx: tx.clone(),
+        rand_data_len: rand_data_len,
     };
 
     let mut join_handles: Vec<JoinHandle<String>> = Vec::new();
@@ -501,6 +528,12 @@ fn main() {
             Ok(Message::VerificationCompleted) => {
                 state.verifications += 1;
                 render_state(&state);
+                if let Some(target) = args.target {
+                    if target == state.verifications {
+                        running.store(false, Ordering::SeqCst);
+                        break;
+                    }
+                }
             }
             Err(_) => {}
         }
