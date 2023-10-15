@@ -2,3 +2,4 @@ linux*/
 buildroot/
 netconsd/
 shared/
+swap*
